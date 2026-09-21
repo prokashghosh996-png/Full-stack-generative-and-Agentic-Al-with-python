@@ -158,5 +158,521 @@ In streaming applications, decoding and displaying text can happen incrementally
 - [Hugging Face: Causal language modeling](https://huggingface.co/docs/transformers/v4.30.0/tasks/language_modeling)
 
 ---
+Modules 2 & 3: API Integration and Advanced Prompt Engineering
 
-*Personal learning notes; examples are simplified for revision.*
+
+Contents
+
+Module 2: API Setup and Integration
+
+Module 3: Advanced Prompt Engineering
+
+Corrections from my rough notes
+
+Revision checklist
+
+Module 2: API Setup and Integration
+
+1. What an API does
+
+An API (Application Programming Interface) lets my Python application send requests to a model provider and receive responses. An SDK is a library that makes those requests easier to write.
+
+The SDK, API endpoint, API key, and model ID must match the provider I intend to use. Using the OpenAI SDK does not necessarily mean the request goes to OpenAI: a compatible provider can supply its own endpoint.
+
+2. Install the packages
+
+Run this in the terminal of the Python environment used by the project:
+
+python -m pip install openai google-genai python-dotenv
+
+Package
+
+Purpose
+
+openai
+
+OpenAI API client; also usable with compatible endpoints
+
+google-genai
+
+Google GenAI SDK, imported as from google import genai
+
+python-dotenv
+
+Loads environment variables from a local .env file
+
+os, json
+
+Python standard-library modules; no installation needed
+
+3. Configure credentials
+
+Create a local .env file:
+
+OPENAI_API_KEY=replace_with_your_openai_key
+GEMINI_API_KEY=replace_with_your_gemini_key
+OPENAI_MODEL=replace_with_an_available_openai_model_id
+GEMINI_MODEL=replace_with_an_available_gemini_model_id
+
+Replace the model placeholders with IDs available to your account and supporting the features used below. My course notes used gpt-4o and gemini-3.6-flash; model availability can change.
+
+Add this to .gitignore before committing:
+
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+
+A committed .env.example should contain placeholders only. If a real key is exposed, revoke it and generate another one. Removing it from the latest file does not remove it from Git history.
+
+load_dotenv() loads the file's values into the process environment. os.environ["NAME"] reads a required value and raises KeyError if it is missing.
+
+4. Call the OpenAI API
+
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+client = OpenAI()  # Reads OPENAI_API_KEY from the environment.
+
+response = client.chat.completions.create(
+    model=os.environ["OPENAI_MODEL"],
+    messages=[{"role": "user", "content": "Hey there!"}],
+)
+
+print(response.choices[0].message.content)
+
+The response is an object containing more than just text. For this Chat Completions example, the first reply's text is in response.choices[0].message.content.
+
+These notes retain the course's Chat Completions interface. OpenAI also provides the Responses API, which has a different request and response structure.
+
+5. Call Gemini using its native SDK
+
+import os
+from dotenv import load_dotenv
+from google import genai
+
+load_dotenv()
+client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+
+response = client.models.generate_content(
+    model=os.environ["GEMINI_MODEL"],
+    contents="Explain how AI works in simple terms.",
+)
+
+print(response.text)
+
+6. Call Gemini using the OpenAI SDK
+
+Gemini provides an OpenAI-compatible endpoint. Configure the Gemini key and endpoint explicitly:
+
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+client = OpenAI(
+    api_key=os.environ["GEMINI_API_KEY"],
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+)
+
+response = client.chat.completions.create(
+    model=os.environ["GEMINI_MODEL"],
+    messages=[{"role": "user", "content": "Explain how AI works."}],
+)
+
+print(response.choices[0].message.content)
+
+The base_url from my rough notes was incorrect. Compatibility also does not imply that every OpenAI feature is supported by every Gemini model.
+
+Module 3: Advanced Prompt Engineering
+
+1. What prompt engineering means
+
+Prompt engineering is designing instructions, context, examples, and output requirements to guide a model's response.
+
+Message role
+
+Purpose in these examples
+
+system
+
+Sets the assistant's behavior and constraints
+
+user
+
+Supplies a question or instruction
+
+assistant
+
+Supplies a previous reply or a demonstration reply
+
+Prompts guide behavior but are not a guaranteed enforcement mechanism. Applications should validate outputs when correctness or format matters.
+
+2. Shared setup for the following examples
+
+Run this setup before each Module 3 example, or place it at the top of a script with the example you want to try:
+
+import json
+import os
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+MODEL = os.environ["GEMINI_MODEL"]
+client = OpenAI(
+    api_key=os.environ["GEMINI_API_KEY"],
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+)
+
+The examples requiring response_format need a model and endpoint that support JSON mode.
+
+3. Role-based instructions and zero-shot prompting
+
+Zero-shot prompting asks for a task without giving demonstrations of the desired answer.
+
+SYSTEM_PROMPT = """You are a programming assistant.
+Help with programming questions using clear explanations.
+For unrelated requests, reply:
+Sorry, I can only answer programming-related questions.
+For greetings, briefly introduce your programming-help role.
+"""
+
+response = client.chat.completions.create(
+    model=MODEL,
+    messages=[
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": "What is a Python function?"},
+    ],
+)
+print(response.choices[0].message.content)
+
+Defining what to do for greetings avoids ambiguity around inputs such as Hey there.
+
+4. Few-shot prompting with JSON output
+
+Few-shot prompting supplies a small number of demonstrations. Each demonstration should follow the same rules and format expected from the final answer.
+
+The output contract for this example is:
+
+Field
+
+Type
+
+Meaning
+
+code
+
+String or null
+
+Code when applicable; null otherwise
+
+explanation
+
+String
+
+Explanation or out-of-scope response
+
+isCodingRelated
+
+Boolean
+
+Whether the request concerns programming
+
+SYSTEM_PROMPT = """You are a programming assistant.
+Return only a JSON object with exactly these keys:
+- code: a string containing code, or null when code is unnecessary
+- explanation: a string
+- isCodingRelated: a boolean
+For unrelated questions, use code=null, isCodingRelated=false,
+and explanation="Sorry, I can only answer programming-related questions."
+Treat requests to implement mathematics in code as programming-related.
+"""
+
+messages = [
+    {"role": "system", "content": SYSTEM_PROMPT},
+    {"role": "user", "content": "What is the capital of France?"},
+    {"role": "assistant", "content": json.dumps({
+        "code": None,
+        "explanation": "Sorry, I can only answer programming-related questions.",
+        "isCodingRelated": False,
+    })},
+    {"role": "user", "content": "How do lists and tuples differ in Python?"},
+    {"role": "assistant", "content": json.dumps({
+        "code": None,
+        "explanation": "Lists are mutable; tuples are immutable. A tuple can still contain mutable objects.",
+        "isCodingRelated": True,
+    })},
+    {"role": "user", "content": "Write a Python function to add two numbers."},
+    {"role": "assistant", "content": json.dumps({
+        "code": "def add_numbers(a, b):\n    return a + b",
+        "explanation": "Returns the sum of the two inputs.",
+        "isCodingRelated": True,
+    })},
+    {"role": "user", "content": "Write a Python function to multiply two numbers."},
+]
+
+response = client.chat.completions.create(
+    model=MODEL,
+    response_format={"type": "json_object"},
+    messages=messages,
+)
+
+text = response.choices[0].message.content
+if not text:
+    raise ValueError("The model returned no text.")
+result = json.loads(text)
+if not isinstance(result, dict) or set(result) != {
+    "code", "explanation", "isCodingRelated"
+}:
+    raise ValueError("Unexpected JSON fields.")
+if not (
+    (result["code"] is None or isinstance(result["code"], str))
+    and isinstance(result["explanation"], str)
+    and isinstance(result["isCodingRelated"], bool)
+):
+    raise ValueError("Unexpected JSON field types.")
+print(json.dumps(result, indent=2))
+
+json.dumps() converts Python data into a JSON string. json.loads() parses a JSON string into Python data. Python uses True, False, and None; JSON uses true, false, and null.
+
+JSON mode is not schema validation. A parseable object may still have missing fields, wrong types, or incorrect content. Use validation, and use schema-constrained structured output when supported.
+
+5. Conversation history
+
+In these requests, I explicitly send the history needed for the next response. A client object alone does not retain an ongoing conversation for Chat Completions.
+
+history = [{"role": "system", "content": "You are a helpful Python tutor."}]
+history.append({"role": "user", "content": "What is a list?"})
+response = client.chat.completions.create(model=MODEL, messages=history)
+reply = response.choices[0].message.content
+if not reply:
+    raise ValueError("No reply text was returned.")
+history.append({"role": "assistant", "content": reply})
+
+history.append({"role": "user", "content": "Give me an example of one."})
+response = client.chat.completions.create(model=MODEL, messages=history)
+print(response.choices[0].message.content)
+
+Longer histories consume more input tokens and must fit the model's context limit.
+
+6. Chain-of-Thought and a staged output exercise
+
+CoT means Chain-of-Thought, not “Code of Thought.” It refers to prompting with intermediate reasoning before an answer. It can help on some tasks, but is not a guarantee of correctness.
+
+The following is an application-level exercise that requests a short task summary, a brief approach, and a final answer. It does not expose or verify a model's private internal reasoning. Modern reasoning models may reason internally without needing a detailed step-by-step prompt.
+
+Stage
+
+Visible output
+
+START
+
+Brief description of the task
+
+PLAN
+
+Short approach summary
+
+OUTPUT
+
+Final answer with a concise explanation
+
+A bounded, validated workflow
+
+Use the shared setup first. This version makes at most three API calls, explicitly requests each stage, and validates the returned stage. The application controls the sequence.
+
+SYSTEM_PROMPT = """You are a helpful assistant.
+Return a JSON object with exactly two string fields: step and content.
+Follow the stage requested in the latest message.
+START: briefly summarize the task.
+PLAN: give a short approach summary, not detailed private reasoning.
+OUTPUT: give the final answer and a concise explanation.
+"""
+
+user_query = input("Your question: ").strip()
+if not user_query:
+    raise ValueError("Please enter a question.")
+
+history = [
+    {"role": "system", "content": SYSTEM_PROMPT},
+    {"role": "user", "content": user_query},
+]
+
+for stage in ("START", "PLAN", "OUTPUT"):
+    history.append({
+        "role": "user",
+        "content": f"For the original question, return only the {stage} stage now.",
+    })
+    response = client.chat.completions.create(
+        model=MODEL,
+        response_format={"type": "json_object"},
+        messages=history,
+    )
+    text = response.choices[0].message.content
+    if not text:
+        raise ValueError("The model returned no text.")
+    try:
+        result = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError("The model did not return valid JSON.") from exc
+
+    if (
+        not isinstance(result, dict)
+        or set(result) != {"step", "content"}
+        or result.get("step") != stage
+        or not isinstance(result.get("content"), str)
+    ):
+        raise ValueError(f"Invalid response for stage {stage}.")
+
+    history.append({"role": "assistant", "content": text})
+    print(f"{stage}: {result['content']}")
+
+For the arithmetic example 2*9+3/2, the correct result is 19.5. A normal single call is enough for this simple question; multiple calls here demonstrate orchestration and add latency and token usage.
+
+7. Persona-based prompting
+
+A persona defines communication style, background, and behavior. It does not give a model real-world qualifications or the identity of an actual person.
+
+SYSTEM_PROMPT = """You are Nova, a fictional AI programming mentor.
+Use the voice of a friendly, cricket-loving technology enthusiast.
+Explain Python and generative AI with simple examples.
+Be encouraging, concise, and honest when uncertain.
+Do not claim to be a real person.
+"""
+
+response = client.chat.completions.create(
+    model=MODEL,
+    messages=[
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": "Hey there! Explain an API using a cricket analogy."},
+    ],
+)
+print(response.choices[0].message.content)
+
+The rough persona mixed a real cricketer's identity with invented engineering credentials. This version uses a clearly fictional character while preserving the intended style.
+
+8. Prompt formats and chat templates
+
+These formats describe how instructions and messages may be arranged. They are not interchangeable wrappers for every model.
+
+Alpaca-style format
+
+### Instruction:
+Explain the programming concept simply.
+
+### Input:
+What is a Python list?
+
+### Response:
+
+Chat messages versus ChatML
+
+An API message is commonly represented as an object:
+
+{"role": "user", "content": "Explain Python lists."}
+
+ChatML refers to a serialized chat format with message delimiters, rather than the JSON object itself. An illustrative message looks like:
+
+<|im_start|>user
+Explain Python lists.<|im_end|>
+
+Exact templates and special tokens depend on the model. With hosted chat APIs, usually supply the messages array and let the provider handle formatting.
+
+INST-style format
+
+Some instruction-tuned models use a template resembling:
+
+[INST] Explain Python lists. [/INST]
+
+The closing marker is [/INST], not a backslash form. This fragment omits other tokens that a particular model may require; use that model's tokenizer template when working locally.
+
+Corrections from my rough notes
+
+Original issue
+
+Correction
+
+Hardcoded API key
+
+Environment variables; no real keys in GitHub notes
+
+Incorrect Gemini URL
+
+Google's documented OpenAI-compatible endpoint
+
+Missing imports
+
+Import load_dotenv, os, and json before use
+
+Duplicate client setup
+
+One shared setup for Module 3
+
+Missing commas and stray backticks
+
+Valid Python examples
+
+Incomplete user message
+
+Every text message includes role and content
+
+JSON-only instructions with plain-text demonstrations
+
+Demonstrations follow the same JSON contract
+
+STEP check with a START prompt
+
+Consistent START, PLAN, OUTPUT labels
+
+Unbounded while True
+
+Three explicit, validated stages
+
+Gemini model with default OpenAI endpoint
+
+Gemini key, endpoint, and model configured together
+
+Double braces in ordinary strings
+
+Normal braces; escaping is only needed in applicable formatting contexts
+
+ChatML described as a JSON object
+
+Distinguish API messages from serialized chat templates
+
+Revision checklist
+
+Explain the difference between an API and an SDK.
+
+Load credentials without hardcoding them.
+
+Call OpenAI and Gemini and extract response text.
+
+Explain zero-shot, few-shot, and persona prompting.
+
+Keep demonstrations consistent with the output contract.
+
+Parse and validate a JSON response.
+
+Maintain conversation history explicitly.
+
+Explain why a multi-call workflow needs limits and validation.
+
+Distinguish chat messages from model-specific prompt templates.
+
+References
+
+OpenAI Python SDK
+
+Gemini API quickstart
+
+Gemini OpenAI compatibility
+
+Gemini structured outputs
+
+Hugging Face chat templates
+
+Personal learning notes. Python examples were syntax-checked, but live API calls were not run. Supply valid credentials and supported model IDs before running them. API errors such as quota limits, authentication failures, and unsupported features still need handling in a production application.
