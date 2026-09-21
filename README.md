@@ -566,23 +566,6 @@ Some instruction-tuned models use a template resembling:
 
 The closing marker is `[/INST]`, not a backslash form. This fragment omits other tokens that a particular model may require; use that model's tokenizer template when working locally.
 
-## Corrections from my rough notes
-
-| Original issue | Correction |
-| --- | --- |
-| Hardcoded API key | Environment variables; no real keys in GitHub notes |
-| Incorrect Gemini URL | Google's documented OpenAI-compatible endpoint |
-| Missing imports | Import `load_dotenv`, `os`, and `json` before use |
-| Duplicate client setup | One shared setup for Module 3 |
-| Missing commas and stray backticks | Valid Python examples |
-| Incomplete user message | Every text message includes `role` and `content` |
-| JSON-only instructions with plain-text demonstrations | Demonstrations follow the same JSON contract |
-| `STEP` check with a `START` prompt | Consistent `START`, `PLAN`, `OUTPUT` labels |
-| Unbounded `while True` | Three explicit, validated stages |
-| Gemini model with default OpenAI endpoint | Gemini key, endpoint, and model configured together |
-| Double braces in ordinary strings | Normal braces; escaping is only needed in applicable formatting contexts |
-| ChatML described as a JSON object | Distinguish API messages from serialized chat templates |
-
 ## Revision checklist
 
 - [ ] Explain the difference between an API and an SDK.
