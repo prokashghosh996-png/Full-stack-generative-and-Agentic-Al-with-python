@@ -158,78 +158,68 @@ In streaming applications, decoding and displaying text can happen incrementally
 - [Hugging Face: Causal language modeling](https://huggingface.co/docs/transformers/v4.30.0/tasks/language_modeling)
 
 ---
-Modules 2 & 3: API Integration and Advanced Prompt Engineering
+# Modules 2 & 3: API Integration and Advanced Prompt Engineering
 
+## Contents
 
-Contents
+- [Module 2: API Setup and Integration](#module-2-api-setup-and-integration)
+- [Module 3: Advanced Prompt Engineering](#module-3-advanced-prompt-engineering)
+- [Corrections from my rough notes](#corrections-from-my-rough-notes)
+- [Revision checklist](#revision-checklist)
 
-Module 2: API Setup and Integration
+# Module 2: API Setup and Integration
 
-Module 3: Advanced Prompt Engineering
+## 1. What an API does
 
-Corrections from my rough notes
-
-Revision checklist
-
-Module 2: API Setup and Integration
-
-1. What an API does
-
-An API (Application Programming Interface) lets my Python application send requests to a model provider and receive responses. An SDK is a library that makes those requests easier to write.
+An **API (Application Programming Interface)** lets my Python application send requests to a model provider and receive responses. An **SDK** is a library that makes those requests easier to write.
 
 The SDK, API endpoint, API key, and model ID must match the provider I intend to use. Using the OpenAI SDK does not necessarily mean the request goes to OpenAI: a compatible provider can supply its own endpoint.
 
-2. Install the packages
+## 2. Install the packages
 
 Run this in the terminal of the Python environment used by the project:
 
+```bash
 python -m pip install openai google-genai python-dotenv
+```
 
-Package
+| Package | Purpose |
+| --- | --- |
+| `openai` | OpenAI API client; also usable with compatible endpoints |
+| `google-genai` | Google GenAI SDK, imported as `from google import genai` |
+| `python-dotenv` | Loads environment variables from a local `.env` file |
+| `os`, `json` | Python standard-library modules; no installation needed |
 
-Purpose
+## 3. Configure credentials
 
-openai
+Create a local `.env` file:
 
-OpenAI API client; also usable with compatible endpoints
-
-google-genai
-
-Google GenAI SDK, imported as from google import genai
-
-python-dotenv
-
-Loads environment variables from a local .env file
-
-os, json
-
-Python standard-library modules; no installation needed
-
-3. Configure credentials
-
-Create a local .env file:
-
+```dotenv
 OPENAI_API_KEY=replace_with_your_openai_key
 GEMINI_API_KEY=replace_with_your_gemini_key
 OPENAI_MODEL=replace_with_an_available_openai_model_id
 GEMINI_MODEL=replace_with_an_available_gemini_model_id
+```
 
-Replace the model placeholders with IDs available to your account and supporting the features used below. My course notes used gpt-4o and gemini-3.6-flash; model availability can change.
+Replace the model placeholders with IDs available to your account and supporting the features used below. My course notes used `gpt-4o` and `gemini-3.6-flash`; model availability can change.
 
-Add this to .gitignore before committing:
+Add this to `.gitignore` **before committing**:
 
+```gitignore
 .env
 .env.*
 !.env.example
 .venv/
 __pycache__/
+```
 
-A committed .env.example should contain placeholders only. If a real key is exposed, revoke it and generate another one. Removing it from the latest file does not remove it from Git history.
+A committed `.env.example` should contain placeholders only. If a real key is exposed, revoke it and generate another one. Removing it from the latest file does not remove it from Git history.
 
-load_dotenv() loads the file's values into the process environment. os.environ["NAME"] reads a required value and raises KeyError if it is missing.
+`load_dotenv()` loads the file's values into the process environment. `os.environ["NAME"]` reads a required value and raises `KeyError` if it is missing.
 
-4. Call the OpenAI API
+## 4. Call the OpenAI API
 
+```python
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -243,13 +233,15 @@ response = client.chat.completions.create(
 )
 
 print(response.choices[0].message.content)
+```
 
-The response is an object containing more than just text. For this Chat Completions example, the first reply's text is in response.choices[0].message.content.
+The response is an object containing more than just text. For this Chat Completions example, the first reply's text is in `response.choices[0].message.content`.
 
 These notes retain the course's Chat Completions interface. OpenAI also provides the Responses API, which has a different request and response structure.
 
-5. Call Gemini using its native SDK
+## 5. Call Gemini using its native SDK
 
+```python
 import os
 from dotenv import load_dotenv
 from google import genai
@@ -263,11 +255,13 @@ response = client.models.generate_content(
 )
 
 print(response.text)
+```
 
-6. Call Gemini using the OpenAI SDK
+## 6. Call Gemini using the OpenAI SDK
 
 Gemini provides an OpenAI-compatible endpoint. Configure the Gemini key and endpoint explicitly:
 
+```python
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -284,37 +278,29 @@ response = client.chat.completions.create(
 )
 
 print(response.choices[0].message.content)
+```
 
-The base_url from my rough notes was incorrect. Compatibility also does not imply that every OpenAI feature is supported by every Gemini model.
+The `base_url` from my rough notes was incorrect. Compatibility also does not imply that every OpenAI feature is supported by every Gemini model.
 
-Module 3: Advanced Prompt Engineering
+# Module 3: Advanced Prompt Engineering
 
-1. What prompt engineering means
+## 1. What prompt engineering means
 
 Prompt engineering is designing instructions, context, examples, and output requirements to guide a model's response.
 
-Message role
-
-Purpose in these examples
-
-system
-
-Sets the assistant's behavior and constraints
-
-user
-
-Supplies a question or instruction
-
-assistant
-
-Supplies a previous reply or a demonstration reply
+| Message role | Purpose in these examples |
+| --- | --- |
+| `system` | Sets the assistant's behavior and constraints |
+| `user` | Supplies a question or instruction |
+| `assistant` | Supplies a previous reply or a demonstration reply |
 
 Prompts guide behavior but are not a guaranteed enforcement mechanism. Applications should validate outputs when correctness or format matters.
 
-2. Shared setup for the following examples
+## 2. Shared setup for the following examples
 
 Run this setup before each Module 3 example, or place it at the top of a script with the example you want to try:
 
+```python
 import json
 import os
 from dotenv import load_dotenv
@@ -326,13 +312,15 @@ client = OpenAI(
     api_key=os.environ["GEMINI_API_KEY"],
     base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
 )
+```
 
-The examples requiring response_format need a model and endpoint that support JSON mode.
+The examples requiring `response_format` need a model and endpoint that support JSON mode.
 
-3. Role-based instructions and zero-shot prompting
+## 3. Role-based instructions and zero-shot prompting
 
-Zero-shot prompting asks for a task without giving demonstrations of the desired answer.
+**Zero-shot prompting** asks for a task without giving demonstrations of the desired answer.
 
+```python
 SYSTEM_PROMPT = """You are a programming assistant.
 Help with programming questions using clear explanations.
 For unrelated requests, reply:
@@ -348,39 +336,23 @@ response = client.chat.completions.create(
     ],
 )
 print(response.choices[0].message.content)
+```
 
-Defining what to do for greetings avoids ambiguity around inputs such as Hey there.
+Defining what to do for greetings avoids ambiguity around inputs such as `Hey there`.
 
-4. Few-shot prompting with JSON output
+## 4. Few-shot prompting with JSON output
 
-Few-shot prompting supplies a small number of demonstrations. Each demonstration should follow the same rules and format expected from the final answer.
+**Few-shot prompting** supplies a small number of demonstrations. Each demonstration should follow the same rules and format expected from the final answer.
 
 The output contract for this example is:
 
-Field
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `code` | String or null | Code when applicable; null otherwise |
+| `explanation` | String | Explanation or out-of-scope response |
+| `isCodingRelated` | Boolean | Whether the request concerns programming |
 
-Type
-
-Meaning
-
-code
-
-String or null
-
-Code when applicable; null otherwise
-
-explanation
-
-String
-
-Explanation or out-of-scope response
-
-isCodingRelated
-
-Boolean
-
-Whether the request concerns programming
-
+```python
 SYSTEM_PROMPT = """You are a programming assistant.
 Return only a JSON object with exactly these keys:
 - code: a string containing code, or null when code is unnecessary
@@ -435,15 +407,17 @@ if not (
 ):
     raise ValueError("Unexpected JSON field types.")
 print(json.dumps(result, indent=2))
+```
 
-json.dumps() converts Python data into a JSON string. json.loads() parses a JSON string into Python data. Python uses True, False, and None; JSON uses true, false, and null.
+`json.dumps()` converts Python data into a JSON string. `json.loads()` parses a JSON string into Python data. Python uses `True`, `False`, and `None`; JSON uses `true`, `false`, and `null`.
 
-JSON mode is not schema validation. A parseable object may still have missing fields, wrong types, or incorrect content. Use validation, and use schema-constrained structured output when supported.
+**JSON mode is not schema validation.** A parseable object may still have missing fields, wrong types, or incorrect content. Use validation, and use schema-constrained structured output when supported.
 
-5. Conversation history
+## 5. Conversation history
 
 In these requests, I explicitly send the history needed for the next response. A client object alone does not retain an ongoing conversation for Chat Completions.
 
+```python
 history = [{"role": "system", "content": "You are a helpful Python tutor."}]
 history.append({"role": "user", "content": "What is a list?"})
 response = client.chat.completions.create(model=MODEL, messages=history)
@@ -455,35 +429,27 @@ history.append({"role": "assistant", "content": reply})
 history.append({"role": "user", "content": "Give me an example of one."})
 response = client.chat.completions.create(model=MODEL, messages=history)
 print(response.choices[0].message.content)
+```
 
 Longer histories consume more input tokens and must fit the model's context limit.
 
-6. Chain-of-Thought and a staged output exercise
+## 6. Chain-of-Thought and a staged output exercise
 
-CoT means Chain-of-Thought, not “Code of Thought.” It refers to prompting with intermediate reasoning before an answer. It can help on some tasks, but is not a guarantee of correctness.
+**CoT means Chain-of-Thought**, not “Code of Thought.” It refers to prompting with intermediate reasoning before an answer. It can help on some tasks, but is not a guarantee of correctness.
 
 The following is an application-level exercise that requests a short task summary, a brief approach, and a final answer. It does not expose or verify a model's private internal reasoning. Modern reasoning models may reason internally without needing a detailed step-by-step prompt.
 
-Stage
+| Stage | Visible output |
+| --- | --- |
+| `START` | Brief description of the task |
+| `PLAN` | Short approach summary |
+| `OUTPUT` | Final answer with a concise explanation |
 
-Visible output
-
-START
-
-Brief description of the task
-
-PLAN
-
-Short approach summary
-
-OUTPUT
-
-Final answer with a concise explanation
-
-A bounded, validated workflow
+### A bounded, validated workflow
 
 Use the shared setup first. This version makes at most three API calls, explicitly requests each stage, and validates the returned stage. The application controls the sequence.
 
+```python
 SYSTEM_PROMPT = """You are a helpful assistant.
 Return a JSON object with exactly two string fields: step and content.
 Follow the stage requested in the latest message.
@@ -529,13 +495,15 @@ for stage in ("START", "PLAN", "OUTPUT"):
 
     history.append({"role": "assistant", "content": text})
     print(f"{stage}: {result['content']}")
+```
 
-For the arithmetic example 2*9+3/2, the correct result is 19.5. A normal single call is enough for this simple question; multiple calls here demonstrate orchestration and add latency and token usage.
+For the arithmetic example `2*9+3/2`, the correct result is `19.5`. A normal single call is enough for this simple question; multiple calls here demonstrate orchestration and add latency and token usage.
 
-7. Persona-based prompting
+## 7. Persona-based prompting
 
 A persona defines communication style, background, and behavior. It does not give a model real-world qualifications or the identity of an actual person.
 
+```python
 SYSTEM_PROMPT = """You are Nova, a fictional AI programming mentor.
 Use the voice of a friendly, cricket-loving technology enthusiast.
 Explain Python and generative AI with simple examples.
@@ -551,15 +519,17 @@ response = client.chat.completions.create(
     ],
 )
 print(response.choices[0].message.content)
+```
 
 The rough persona mixed a real cricketer's identity with invented engineering credentials. This version uses a clearly fictional character while preserving the intended style.
 
-8. Prompt formats and chat templates
+## 8. Prompt formats and chat templates
 
 These formats describe how instructions and messages may be arranged. They are not interchangeable wrappers for every model.
 
-Alpaca-style format
+### Alpaca-style format
 
+```text
 ### Instruction:
 Explain the programming concept simply.
 
@@ -567,112 +537,75 @@ Explain the programming concept simply.
 What is a Python list?
 
 ### Response:
+```
 
-Chat messages versus ChatML
+### Chat messages versus ChatML
 
 An API message is commonly represented as an object:
 
+```json
 {"role": "user", "content": "Explain Python lists."}
+```
 
-ChatML refers to a serialized chat format with message delimiters, rather than the JSON object itself. An illustrative message looks like:
+**ChatML** refers to a serialized chat format with message delimiters, rather than the JSON object itself. An illustrative message looks like:
 
+```text
 <|im_start|>user
 Explain Python lists.<|im_end|>
+```
 
-Exact templates and special tokens depend on the model. With hosted chat APIs, usually supply the messages array and let the provider handle formatting.
+Exact templates and special tokens depend on the model. With hosted chat APIs, usually supply the `messages` array and let the provider handle formatting.
 
-INST-style format
+### INST-style format
 
 Some instruction-tuned models use a template resembling:
 
+```text
 [INST] Explain Python lists. [/INST]
+```
 
-The closing marker is [/INST], not a backslash form. This fragment omits other tokens that a particular model may require; use that model's tokenizer template when working locally.
+The closing marker is `[/INST]`, not a backslash form. This fragment omits other tokens that a particular model may require; use that model's tokenizer template when working locally.
 
-Corrections from my rough notes
+## Corrections from my rough notes
 
-Original issue
+| Original issue | Correction |
+| --- | --- |
+| Hardcoded API key | Environment variables; no real keys in GitHub notes |
+| Incorrect Gemini URL | Google's documented OpenAI-compatible endpoint |
+| Missing imports | Import `load_dotenv`, `os`, and `json` before use |
+| Duplicate client setup | One shared setup for Module 3 |
+| Missing commas and stray backticks | Valid Python examples |
+| Incomplete user message | Every text message includes `role` and `content` |
+| JSON-only instructions with plain-text demonstrations | Demonstrations follow the same JSON contract |
+| `STEP` check with a `START` prompt | Consistent `START`, `PLAN`, `OUTPUT` labels |
+| Unbounded `while True` | Three explicit, validated stages |
+| Gemini model with default OpenAI endpoint | Gemini key, endpoint, and model configured together |
+| Double braces in ordinary strings | Normal braces; escaping is only needed in applicable formatting contexts |
+| ChatML described as a JSON object | Distinguish API messages from serialized chat templates |
 
-Correction
+## Revision checklist
 
-Hardcoded API key
+- [ ] Explain the difference between an API and an SDK.
+- [ ] Load credentials without hardcoding them.
+- [ ] Call OpenAI and Gemini and extract response text.
+- [ ] Explain zero-shot, few-shot, and persona prompting.
+- [ ] Keep demonstrations consistent with the output contract.
+- [ ] Parse and validate a JSON response.
+- [ ] Maintain conversation history explicitly.
+- [ ] Explain why a multi-call workflow needs limits and validation.
+- [ ] Distinguish chat messages from model-specific prompt templates.
 
-Environment variables; no real keys in GitHub notes
+## References
 
-Incorrect Gemini URL
+- [OpenAI Python SDK](https://github.com/openai/openai-python)
+- [Gemini API quickstart](https://ai.google.dev/gemini-api/docs/quickstart)
+- [Gemini OpenAI compatibility](https://ai.google.dev/gemini-api/docs/openai)
+- [Gemini structured outputs](https://ai.google.dev/gemini-api/docs/structured-output)
+- [Hugging Face chat templates](https://huggingface.co/docs/transformers/chat_templating)
 
-Google's documented OpenAI-compatible endpoint
+---
 
-Missing imports
+*Personal learning notes. Python examples were syntax-checked, but live API calls were not run. Supply valid credentials and supported model IDs before running them. API errors such as quota limits, authentication failures, and unsupported features still need handling in a production application.*
 
-Import load_dotenv, os, and json before use
 
-Duplicate client setup
-
-One shared setup for Module 3
-
-Missing commas and stray backticks
-
-Valid Python examples
-
-Incomplete user message
-
-Every text message includes role and content
-
-JSON-only instructions with plain-text demonstrations
-
-Demonstrations follow the same JSON contract
-
-STEP check with a START prompt
-
-Consistent START, PLAN, OUTPUT labels
-
-Unbounded while True
-
-Three explicit, validated stages
-
-Gemini model with default OpenAI endpoint
-
-Gemini key, endpoint, and model configured together
-
-Double braces in ordinary strings
-
-Normal braces; escaping is only needed in applicable formatting contexts
-
-ChatML described as a JSON object
-
-Distinguish API messages from serialized chat templates
-
-Revision checklist
-
-Explain the difference between an API and an SDK.
-
-Load credentials without hardcoding them.
-
-Call OpenAI and Gemini and extract response text.
-
-Explain zero-shot, few-shot, and persona prompting.
-
-Keep demonstrations consistent with the output contract.
-
-Parse and validate a JSON response.
-
-Maintain conversation history explicitly.
-
-Explain why a multi-call workflow needs limits and validation.
-
-Distinguish chat messages from model-specific prompt templates.
-
-References
-
-OpenAI Python SDK
-
-Gemini API quickstart
-
-Gemini OpenAI compatibility
-
-Gemini structured outputs
-
-Hugging Face chat templates
-
-Personal learning notes. Python examples were syntax-checked, but live API calls were not run. Supply valid credentials and supported model IDs before running them. API errors such as quota limits, authentication failures, and unsupported features still need handling in a production application.
+---
