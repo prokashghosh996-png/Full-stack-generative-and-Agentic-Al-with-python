@@ -905,7 +905,7 @@ Build a PDF question-answering application that:
 
 ## RAG Workflow
 
-![RAG workflow: data preparation, retrieval, and answer generation](images/rag-workflow.png)
+![RAG workflow: data preparation, retrieval, and answer generation](RAG/images/rag-workflow.png)
 
 *Image credit: GradientFlow.com.*
 
