@@ -618,6 +618,264 @@ I learned how these tools fit together to make locally running LLMs accessible t
 
 > This module mainly involved setup demonstrations, so these notes summarize the workflow rather than detailed code.
 
+
+---
+
+# Module 5: Running LLMs via Hugging Face Hub
+
+This module introduced Hugging Face Hub and the workflow for accessing, downloading, and running models.
+
+## Topics Covered
+
+- Introduction to model deployment through Hugging Face.
+- Configuring and securing a Hugging Face account.
+- Accessing instruction-tuned models such as Google Gemma.
+- Installing and using Hugging Face CLI tools.
+- Downloading models from the Hub and running them with a compatible runtime.
+
+## Key Concepts
+
+| Concept | Understanding |
+| --- | --- |
+| Hugging Face Hub | A platform for sharing and accessing models, datasets, and related resources |
+| Instruction-tuned model | A model adapted to follow instructions and respond to requests |
+| Access token | A credential used to authenticate supported operations |
+| CLI tools | Tools for interacting with the Hub from the terminal |
+| Model execution | Loading and running downloaded model files using suitable software and hardware |
+
+Downloading a model and running it are separate steps. Access requirements, dependencies, and hardware needs depend on the selected model.
+
+> This module mainly involved setup demonstrations, so these notes summarize the concepts and workflow.
+
+---
+
+# Module 6: Building AI Agents and Agentic Workflows
+
+## 1. From an LLM to an AI Agent
+
+A text-generating LLM processes input tokens and predicts output tokens. On its own, it does not execute Python functions or retrieve live weather.
+
+An agent application connects the model to tools and manages the interaction:
+
+- The model interprets the request and can request a tool call.
+- The application validates the request and executes an allowed function.
+- The function returns an observation.
+- The model uses that observation to generate a response.
+
+**The model requests the action; the application executes it.**
+
+## 2. Understanding Agentic Workflows
+
+My notebook used a support-system example involving:
+
+- Authentication
+- Orders
+- Payments
+- Shipping
+- Databases such as MongoDB and PostgreSQL
+
+An agent could interact with these services through explicitly provided tools. Its access depends on the application's permissions and implementation.
+
+The weather project applies this idea to one external service.
+
+## 3. Project: A CLI Weather Agent
+
+### Goal
+
+Accept a natural-language weather question, retrieve current weather, and return a short answer based on the retrieved information.
+
+Example request:
+
+> What is the weather in Goa?
+
+### Components
+
+| Component | Purpose |
+| --- | --- |
+| Groq client | Sends requests to the hosted language model |
+| `openai/gpt-oss-20b` | Model selected in the agent code |
+| `get_weather()` | Python function that retrieves weather |
+| wttr.in | External weather service |
+| `requests` | Sends the HTTP request |
+| `python-dotenv` | Loads the API key from `.env` |
+| `json` | Parses model-generated tool arguments |
+
+The model ID contains `openai`, but this implementation sends model requests through the **Groq client**.
+
+## 4. First Experiment: `main.py`
+
+The initial script contains two independent parts:
+
+1. A basic LLM request inside `main()`.
+2. A weather function that calls wttr.in.
+
+The current entry-point call is commented out:
+
+```python
+# if __name__ == "__main__":
+#     main()
+```
+
+Instead, this line executes:
+
+```python
+print(get_weather("Kolkata"))
+```
+
+Therefore, running the current file performs a direct weather lookup for Kolkata. It does not run the LLM interaction or connect the LLM to the weather function.
+
+**Defining a function does not automatically make it available to a model.**
+
+## 5. Defining a Tool
+
+In `weather_agent.py`, the tool definition describes the function that the model may request:
+
+```python
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "get_weather",
+        "description": "Get current weather for a city or location.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "city": {
+                    "type": "string",
+                    "description": "Location, e.g. Goa, India"
+                }
+            },
+            "required": ["city"],
+            "additionalProperties": False
+        }
+    }
+}]
+```
+
+The schema describes the expected argument. It does not execute the function or replace application-side validation.
+
+The function registry connects the tool name to executable Python code:
+
+```python
+available_tools = {
+    "get_weather": get_weather
+}
+```
+
+## 6. The Tool-Calling Workflow
+
+1. Add the system instructions and user question to message history.
+2. Send the history and tool definitions to the model.
+3. Check whether the response contains tool calls.
+4. If there are no tool calls, return the response text.
+5. Otherwise, preserve the assistant's tool-call message.
+6. Parse the arguments and find the function in the registry.
+7. Execute the function and collect its result.
+8. Append the result as a `tool` message.
+9. Call the model again with the updated history.
+
+Each tool result includes the corresponding call ID:
+
+```python
+message_history.append({
+    "role": "tool",
+    "tool_call_id": call.id,
+    "content": tool_output,
+})
+```
+
+This associates the observation with the tool call that requested it.
+
+## 7. Weather Retrieval and Error Handling
+
+The improved `get_weather()` function:
+
+- Rejects empty or invalid city values.
+- Removes surrounding whitespace.
+- URL-encodes the location.
+- Sets a 20-second request timeout.
+- Checks HTTP errors using `raise_for_status()`.
+- Returns an error message when the request fails.
+
+These changes make the lookup more robust than the initial experiment.
+
+A successful HTTP response still does not guarantee that the returned content is accurate or suitable; stronger applications should validate the response content too.
+
+## 8. System Instructions
+
+The weather assistant is instructed to:
+
+- Use the weather tool for current conditions.
+- Ask for a location when it is missing.
+- Use only the provided tool.
+- Give a short, friendly answer.
+- Report lookup failures.
+- Avoid inventing weather information.
+
+The code uses:
+
+```python
+tool_choice="auto"
+```
+
+This lets the model choose whether to request a tool. The instruction to use the tool guides that choice, but the application does not independently enforce a weather lookup before every weather answer.
+
+## 9. Progress Logs and Execution Limits
+
+The application prints these labels:
+
+| Label | Meaning |
+| --- | --- |
+| `START` | User request |
+| `PLAN` | Application-written progress update |
+| `TOOL` | Requested function and arguments |
+| `OBSERVE` | Function result |
+| `OUTPUT` | Final answer |
+
+The `PLAN` lines are predefined progress messages, not the model's private reasoning.
+
+The agent loop allows at most **six model requests**. A response can contain multiple tool calls, so this is not necessarily a limit of six tool executions.
+
+## 10. Conversation History
+
+Within one request, history contains:
+
+- System instructions
+- The user question
+- Assistant tool calls
+- Tool results
+
+This lets the model use the retrieved weather information.
+
+History is recreated whenever `run_agent()` starts, so this implementation does not maintain a persistent conversation across separate user requests.
+
+## 11. Structured Outputs and Pydantic
+
+The course also covered structured outputs with Pydantic.
+
+Pydantic can define expected fields and validate data against a model. Validation helps detect malformed data; it does not guarantee factual correctness.
+
+**My current weather agent does not use Pydantic.** It uses:
+
+- A JSON Schema tool definition
+- `json.loads()` for argument parsing
+- Manual checks and exception handling
+
+## 12. CLI Coding Agent
+
+The course introduced building a CLI coding agent.
+
+The general idea is to connect a model to tools for development tasks and return execution results to the model.
+
+My submitted implementation is a **CLI weather agent**. It does not yet implement file-editing or command-execution tools.
+
+## Key Takeaways
+
+- Tools allow an LLM application to retrieve information beyond the model's stored knowledge.
+- Tool descriptions and executable functions are separate components.
+- The application controls which functions can execute.
+- Tool results must be added to message history.
+- Validation, timeouts, and request limits help make an agent more reliable.
+- A weather lookup function becomes part of an agent only when it is integrated into the model's tool-calling workflow.
 *Personal learning notes. Python examples were syntax-checked, but live API calls were not run. Supply valid credentials and supported model IDs before running them. API errors such as quota limits, authentication failures, and unsupported features still need handling in a production application.*
 
 
