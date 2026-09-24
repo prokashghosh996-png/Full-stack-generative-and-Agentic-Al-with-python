@@ -1128,6 +1128,64 @@ I learned how to connect PDF loading, chunking, embeddings, vector search, and l
 
 > These notes describe the intended implementation and corrections.
 > Successful end-to-end execution has not yet been verified.
+
+---
+
+# Module 8: Scalable RAG with Async Queues & Distributed Workers
+
+## Learning Status
+
+I understand the overall architecture, but implementing it independently is still challenging. This module needs further coding practice.
+
+## Topics Covered
+
+- Synchronous versus asynchronous RAG workflows.
+- Queue-based processing for long-running tasks.
+- Python RQ for background jobs.
+- Redis and Valkey setup using Docker.
+- Worker orchestration.
+- FastAPI endpoints for submitting jobs.
+- Polling for job status and results.
+- Running multiple workers to process queued tasks.
+
+## My Understanding of the Workflow
+
+1. A user submits a question through an API.
+2. The application adds a job to a queue.
+3. The API returns a job ID without waiting for the full answer.
+4. An available worker processes the RAG task.
+5. The job's result or failure status is recorded.
+6. The client uses the job ID to check progress and retrieve the answer.
+
+## Main Components
+
+| Component | Responsibility |
+| --- | --- |
+| FastAPI | Accepts requests and exposes job-status endpoints |
+| Python RQ | Manages queued jobs and worker execution |
+| Redis / Valkey | Provides storage used by the queue system |
+| Worker | Executes background tasks |
+| RAG pipeline | Retrieves context and generates answers |
+| Polling | Repeatedly checks whether a job has finished |
+
+## Important Distinctions
+
+- A background queue and Python's `async/await` are different mechanisms.
+- Polling checks job status; it does not remove jobs from the queue.
+- Workers consume queued jobs.
+- Adding workers can increase capacity, but model API limits and other resources still constrain throughput.
+
+## Practice Goals
+
+- [ ] Get my basic RAG application working.
+- [ ] Queue a simple Python function and retrieve its result.
+- [ ] Add an API endpoint that returns a job ID.
+- [ ] Add an endpoint for checking job status.
+- [ ] Replace the simple function with my RAG pipeline.
+- [ ] Practise handling failed jobs and running multiple workers.
+
+> Current progress: conceptual understanding gained;
+> independent implementation not yet completed.
 *Personal learning notes. Python examples were syntax-checked, but live API calls were not run. Supply valid credentials and supported model IDs before running them. API errors such as quota limits, authentication failures, and unsupported features still need handling in a production application.*
 
 
