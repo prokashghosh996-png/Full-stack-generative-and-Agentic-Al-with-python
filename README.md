@@ -588,6 +588,36 @@ The closing marker is `[/INST]`, not a backslash form. This fragment omits other
 
 ---
 
+# Module 4: Local LLM Deployment & API Integration
+
+This module focused on installation, configuration, and understanding how the components work together.
+
+## Topics Covered
+
+- **Ollama:** Introduction to running LLMs locally.
+- **Docker:** Setting up a containerized environment for LLMs.
+- **Running models:** Running Ollama models within Docker.
+- **Open WebUI:** Configuring a chat interface connected to an Ollama backend.
+- **FastAPI:** Setting up the Python environment and required dependencies.
+- **API integration:** Connecting Ollama with FastAPI and Python applications.
+
+## Understanding the Components
+
+| Component | Purpose |
+| --- | --- |
+| Ollama | Runs and serves language models |
+| Docker | Packages applications and their dependencies in containers |
+| Open WebUI | Provides a browser-based interface for chatting with models |
+| FastAPI | Creates Python API endpoints that can call Ollama |
+
+Open WebUI and a custom FastAPI application can act as separate clients of Ollama. Docker provides the container environment; it is not the model itself.
+
+## Key Takeaway
+
+I learned how these tools fit together to make locally running LLMs accessible through a chat interface or a Python API.
+
+> This module mainly involved setup demonstrations, so these notes summarize the workflow rather than detailed code.
+
 *Personal learning notes. Python examples were syntax-checked, but live API calls were not run. Supply valid credentials and supported model IDs before running them. API errors such as quota limits, authentication failures, and unsupported features still need handling in a production application.*
 
 
