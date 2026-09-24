@@ -903,6 +903,15 @@ Build a PDF question-answering application that:
 - Retrieves relevant chunks for a user's question.
 - Generates an answer with page references.
 
+## RAG Workflow
+
+![RAG workflow: data preparation, retrieval, and answer generation](images/rag-workflow.png)
+
+*Image credit: GradientFlow.com.*
+
+- **A–D: Indexing** — Extract text, split it into chunks, generate embeddings, and store them in the vector database.
+- **1–5: Answering** — Embed the question, retrieve relevant chunks, and provide them alongside the question to the LLM to generate an answer.
+
 ## 3. Technologies Used
 
 | Technology | Purpose |
