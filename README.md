@@ -1157,6 +1157,75 @@ I understand the overall architecture, but implementing it independently is stil
 5. The job's result or failure status is recorded.
 6. The client uses the job ID to check progress and retrieve the answer.
 
+## Updated Understanding: Sync, Async, and Background Jobs
+
+### Synchronous Processing
+
+The caller waits for an operation to finish before continuing.
+
+In a synchronous request-response workflow:
+
+1. The client sends a request.
+2. The server processes it.
+3. The client receives the result in the same response.
+
+Example: submitting a question and waiting for the RAG answer.
+
+### Asynchronous Processing
+
+Async code can pause while waiting for an operation, such as a network
+request, allowing other tasks to run during that wait.
+
+Async does not automatically mean:
+- The work runs in a separate process.
+- Multiple workers execute it.
+- The API immediately returns a job ID.
+
+An async API endpoint can still return the final answer in the same response.
+
+### Queue-Based Background Processing
+
+This is the main pattern covered in this module:
+
+1. The client submits a task.
+2. The server enqueues it and returns a job ID.
+3. A worker processes the task.
+4. The client checks its status and retrieves the result later.
+
+### Coffee-Shop Analogy
+
+- **Waiting for the result:** I stay at the counter until my coffee is ready.
+- **Background queue:** I receive an order number and collect my coffee later.
+- **Workers:** Baristas process queued orders. More baristas may allow more
+  orders to be handled at once.
+
+The number of baristas is separate from whether I wait at the counter.
+
+### When to Use Each Approach
+
+| Approach | Suitable situation |
+| --- | --- |
+| Direct request-response | The result is needed to complete the current interaction |
+| Async I/O | The application should handle other tasks while waiting for network or database operations |
+| Background queue | Work should continue independently of the original HTTP request |
+
+These approaches can be combined. For example, an async FastAPI endpoint
+can enqueue a background job.
+
+There is no universal 1–2 second cutoff. The choice depends on task duration,
+client timeouts, user experience, reliability, and available resources.
+
+### Application to My RAG Project
+
+- **Interactive questions:** Return the answer directly, or stream it.
+- **Large PDF indexing:** Consider processing it as a background job.
+- **Queued RAG answers:** Return a job ID and let the client check for completion.
+
+### Current Progress
+
+My understanding of these differences has improved.
+Implementing and testing the queue-based workflow independently is still pending.
+
 ## Main Components
 
 | Component | Responsibility |
