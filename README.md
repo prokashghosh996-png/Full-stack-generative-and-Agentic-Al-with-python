@@ -1255,6 +1255,32 @@ Implementing and testing the queue-based workflow independently is still pending
 
 > Current progress: conceptual understanding gained;
 > independent implementation not yet completed.
+
+---
+# Module 9: Introduction to Multimodal Agents
+
+## What Is a Multimodal Agent?
+
+A multimodal agent works with more than one type of input, such as text, images, or audio. It combines a model’s capabilities with tools to complete tasks.
+
+## Key Concepts
+
+- **Modalities:** Different forms of information, including text, images, audio, and video.
+- **Multimodal model:** Processes multiple supported types of information.
+- **Agent:** Uses tools and a workflow to act on a request.
+- **Tool integration:** Connects the model to functions or external services.
+
+## Example Workflow
+
+1. A user uploads a leaf image and asks about its condition.
+2. A vision-capable model analyses the image.
+3. The agent calls an available tool if additional information is needed.
+4. It combines the observations into a response.
+
+## Key Takeaway
+
+A multimodal model can interpret different input types. An agent adds tool use and task execution around those capabilities.
+
 *Personal learning notes. Python examples were syntax-checked, but live API calls were not run. Supply valid credentials and supported model IDs before running them. API errors such as quota limits, authentication failures, and unsupported features still need handling in a production application.*
 
 
