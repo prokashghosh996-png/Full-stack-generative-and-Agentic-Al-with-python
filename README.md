@@ -1281,6 +1281,248 @@ A multimodal agent works with more than one type of input, such as text, images,
 
 A multimodal model can interpret different input types. An agent adds tool use and task execution around those capabilities.
 
+
+---
+
+# Module 10: Introduction to LangGraph — State, Nodes, and Edges
+
+## 1. What I Practised
+
+This example builds a small sequential workflow in LangGraph. It sends a question to a chat model, passes the updated state to another Python function, and returns the final state.
+
+The execution order is **START → chatbot → samplenode → END**.
+
+This is a fixed workflow with one model call, not yet a tool-using autonomous agent.
+
+## 2. Main Concepts
+
+| Concept | Purpose in this script |
+| --- | --- |
+| State | Shared data passed between nodes |
+| Node | A function that reads state and returns updates |
+| Edge | Defines which node runs next |
+| START | Entry point of the graph |
+| END | End of execution |
+| Reducer | Defines how incoming updates merge with existing state |
+| Compilation | Builds an executable graph from its definition |
+| Invocation | Runs the graph with an initial state |
+
+## 3. Setup
+
+Install packages in the Python environment used to run `chat.py`:
+
+```bash
+python -m pip install langgraph langchain langchain-openai python-dotenv typing-extensions
+```
+
+Create a local `.env` file:
+
+```dotenv
+OPENAI_API_KEY=your_openai_api_key_here
+```
+
+Keep credentials out of Git. Add these entries to `.gitignore`:
+
+```gitignore
+.env
+.venv/
+__pycache__/
+```
+
+The example uses `gpt-4.1-mini` through OpenAI. Running it requires API access to that model and any applicable API billing. Change the model configuration if necessary for your account.
+
+Run from the project folder:
+
+```bash
+python chat.py
+```
+
+## 4. My Original `chat.py`
+
+```python
+from dotenv import load_dotenv
+from typing_extensions import TypedDict
+from typing import Annotated
+from langgraph.graph.message import add_messages
+from langgraph.graph import StateGraph, START, END
+from langchain.chat_models import init_chat_model
+
+load_dotenv()
+
+llm = init_chat_model(
+    model="gpt-4.1-mini",
+    model_provider="openai"
+)
+
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+
+
+def chatbot(state: State):
+    response = llm.invoke(state.get("messages"))
+    return {"messages": [response]}
+
+
+def samplenode(state: State):
+    print("\n\nInside samplenode node", state)
+    return {"messages": ["Sample Message Appended"]}
+
+
+graph_builder = StateGraph(State)
+
+graph_builder.add_node("chatbot", chatbot)
+graph_builder.add_node("samplenode", samplenode)
+
+graph_builder.add_edge(START, "chatbot")
+graph_builder.add_edge("chatbot", "samplenode")
+graph_builder.add_edge("samplenode", END)
+
+graph = graph_builder.compile()
+
+updated_state = graph.invoke(State({"messages": ["What is my name?"]}))
+print("\n\nupdated_state", updated_state)
+```
+
+## 5. Understanding the State
+
+```python
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+```
+
+`TypedDict` describes a dictionary's expected keys and value types for type checking. It does not provide runtime validation like a Pydantic model.
+
+`Annotated` attaches the `add_messages` reducer to the `messages` field. Nodes can return only their new messages; the reducer handles merging them into the existing history.
+
+`State({...})` produces a dictionary here. A plain dictionary is also sufficient as graph input:
+
+```python
+updated_state = graph.invoke({
+    "messages": [{"role": "user", "content": "What is my name?"}]
+})
+```
+
+## 6. The Chatbot Node
+
+```python
+def chatbot(state: State):
+    response = llm.invoke(state["messages"])
+    return {"messages": [response]}
+```
+
+The function sends the current messages to the model and returns its reply as a state update. `state["messages"]` makes the required key explicit; using `.get()` would return `None` if the key were absent.
+
+The function returns only the new response, not a reconstructed copy of the entire history.
+
+## 7. The Sample Node
+
+The sample node prints the state it receives and adds a fixed message. It does not call the model.
+
+A subtle detail: the bare string `"Sample Message Appended"` is interpreted as a **human message** by the message conversion used here. Being returned by a node does not make it an assistant message.
+
+If the intended message is an assistant response, use an explicit role instead:
+
+```python
+def samplenode(state: State):
+    print("\n\nInside samplenode node", state)
+    return {
+        "messages": [
+            {"role": "assistant", "content": "Sample Message Appended"}
+        ]
+    }
+```
+
+This alternative changes the message role; it is not the exact behavior of my original version. For application logs, printing or using a separate state field is usually clearer than adding artificial conversation messages.
+
+## 8. How State Changes in This Example
+
+| Stage | Messages in state |
+| --- | --- |
+| Initial input | User question |
+| After `chatbot` | User question + model reply |
+| After `samplenode` | User question + model reply + fixed sample message |
+
+The final state contains message objects, rather than only plain strings. Their printed representations may include IDs and metadata.
+
+The sample node runs **after** the model call. Its appended message therefore does not influence the reply already generated by `chatbot`.
+
+## 9. What `add_messages` Actually Does
+
+It merges messages while tracking message IDs. New IDs are generally appended; an incoming message with an existing ID can replace that message. It also converts supported message representations into message objects.
+
+So “always appends” is an incomplete description. In this example, the new messages are appended because they are distinct messages.
+
+## 10. Why the Model Cannot Know My Name
+
+The original input is only:
+
+```text
+What is my name?
+```
+
+The script does not supply my name or load earlier conversation history. A suitable response would explain that the name has not been provided; actual model wording may vary.
+
+To supply the missing context in the same invocation:
+
+```python
+updated_state = graph.invoke({
+    "messages": [
+        {"role": "user", "content": "My name is Prokash."},
+        {"role": "user", "content": "What is my name?"},
+    ]
+})
+```
+
+This demonstrates supplied context, not persistent memory across separate runs. The script has no checkpointer or other persistence mechanism.
+
+## 11. Reading the Output
+
+To display the messages more clearly, add this after invocation:
+
+```python
+for message in updated_state["messages"]:
+    print(f"{message.type}: {message.content}")
+```
+
+For the original script, the conceptual output order is:
+
+```text
+human: What is my name?
+ai: <model-generated reply>
+human: Sample Message Appended
+```
+
+The final message is the sample message, so `updated_state["messages"][-1]` is not the chatbot's answer in this graph. With this exact one-question workflow, the answer is the second message; more general graphs should identify responses by role or store the answer separately.
+
+## 12. What This Example Does Not Yet Include
+
+- Tool calls or external actions
+- Conditional routing or loops
+- Retrieval from a vector database
+- Persistent memory across separate invocations
+- A continuous interactive chat loop
+
+## 13. Practice Checklist
+
+- [ ] Explain state, nodes, and edges without referring to the code.
+- [ ] Rebuild this two-node graph independently.
+- [ ] Replace string messages with explicit roles.
+- [ ] Supply my name as context and inspect the response.
+- [ ] Add a third node and observe execution order.
+- [ ] Learn conditional edges and checkpointing next.
+
+## Key Takeaway
+
+A LangGraph node reads shared state and returns an update. Edges control the execution order, and reducers control how updates are combined. Keeping message roles and state behavior clear is essential before adding tools or memory.
+
+## References
+
+- [LangGraph graph API](https://docs.langchain.com/oss/python/langgraph/graph-api)
+- [add_messages reference](https://reference.langchain.com/python/langgraph/graph/message/add_messages)
+- [LangGraph memory](https://docs.langchain.com/oss/python/langgraph/add-memory)
+
+---
+
 *Personal learning notes. Python examples were syntax-checked, but live API calls were not run. Supply valid credentials and supported model IDs before running them. API errors such as quota limits, authentication failures, and unsupported features still need handling in a production application.*
 
 
