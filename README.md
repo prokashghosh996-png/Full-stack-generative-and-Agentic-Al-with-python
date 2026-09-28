@@ -1523,6 +1523,357 @@ A LangGraph node reads shared state and returns an update. Edges control the exe
 
 ---
 
+# Module 11: Persistent Conversation State with MongoDB Checkpointing
+
+## 1. What I Learned
+
+In Module 10, I created a LangGraph chatbot using state, nodes, and edges. This module extends that workflow by attaching a **checkpointer** that saves conversation state in MongoDB.
+
+The goal is to let a chatbot continue a conversation across separate invocations, including after restarting the Python program when the database data remains available.
+
+This README includes a cleaned-up version of my `chat_checkpoint.py` example and a small interactive loop for practising persistence.
+
+## 2. Why Conversation State Matters
+
+Consider two messages sent during separate program runs:
+
+1. `My name is Prokash.`
+2. `What is my name?`
+
+The model needs the earlier introduction as context to answer the second question reliably. A checkpointer allows the application to restore the earlier conversation state.
+
+**Saving history does not train the model.** The application retrieves saved messages and includes them in a later model request.
+
+## 3. Main Components
+
+| Component | Role in this example |
+| --- | --- |
+| `StateGraph` | Builds the chatbot workflow |
+| `TypedDict` | Describes the expected state structure |
+| `Annotated` | Associates the messages field with a reducer |
+| `add_messages` | Merges new messages into the existing message history |
+| `init_chat_model` | Creates the chat model client |
+| `MongoDBSaver` | Saves and loads graph checkpoints in MongoDB |
+| `thread_id` | Selects the conversation thread |
+| `stream()` | Runs the graph and yields streamed data |
+| `pretty_print()` | Displays a message in a readable form |
+| `python-dotenv` | Loads environment variables from a local `.env` file |
+
+The graph is **START → chatbot → END**. The checkpointer is attached when compiling the graph; it is not an extra chatbot node.
+
+## 4. Understanding the State
+
+```python
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+```
+
+`messages` holds the conversation. `add_messages` defines how incoming messages are combined with messages already in state.
+
+It adds new messages and can replace an existing message when an incoming message has the same ID. It also handles supported message representations, such as role/content dictionaries.
+
+`TypedDict` describes the shape for type checking; it does not perform runtime validation by itself.
+
+## 5. The Chatbot Node
+
+```python
+def chatbot(state: State):
+    response = llm.invoke(state["messages"])
+    return {"messages": [response]}
+```
+
+The node sends the current history to the model and returns the new response as a state update. The reducer merges that response into the history.
+
+The node does not need to return all previous messages again.
+
+## 6. Attaching the Checkpointer
+
+```python
+def compile_graph_with_checkpointer(checkpointer):
+    return graph_builder.compile(checkpointer=checkpointer)
+```
+
+My original code also contained:
+
+```python
+graph = graph_builder.compile()
+```
+
+That creates a separate graph without a checkpointer. It is unnecessary here because execution uses the graph compiled with `MongoDBSaver`.
+
+The checkpointer manages persistence of graph state, including this example's messages. My node does not manually insert or query MongoDB records.
+
+## 7. Conversation Threads
+
+```python
+config = {
+    "configurable": {
+        "thread_id": "module11-prokash-001"
+    }
+}
+```
+
+A thread ID identifies a conversation, not necessarily a user. One user can have several conversations.
+
+- Reuse the same thread ID to continue its saved state.
+- Use a new, unused thread ID for a separate conversation.
+- Changing the ID does not delete the old conversation.
+
+In my original example, the thread ID was `"piyush"`. That value does **not** tell the model someone's name. A Python comment mentioning an introduction also does not save a message. The introduction must actually be submitted to the graph.
+
+A thread ID is not an authentication mechanism. A deployed application must control which conversations each user can access.
+
+## 8. Setup
+
+### Prerequisites
+
+- Python installed locally.
+- MongoDB running and reachable.
+- An OpenAI API key with access to the configured model.
+- A terminal opened in this module's project folder.
+
+### Create a Python environment on Windows
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install langgraph langchain langchain-openai langgraph-checkpoint-mongodb python-dotenv typing-extensions
+```
+
+These commands use the environment's Python directly, so activating it in PowerShell is optional.
+
+### Suggested `requirements.txt`
+
+```text
+langgraph
+langchain
+langchain-openai
+langgraph-checkpoint-mongodb
+python-dotenv
+typing-extensions
+```
+
+Package versions are not pinned here; this is a learning example, not a verified environment lockfile.
+
+### Local `.env`
+
+Create `.env` next to `chat_checkpoint.py`:
+
+```dotenv
+OPENAI_API_KEY=your_openai_api_key
+MONGODB_URI=mongodb://YOUR_USERNAME:YOUR_PASSWORD@localhost:27017/?authSource=admin
+THREAD_ID=module11-prokash-001
+```
+
+Replace the placeholders with your own configuration. `authSource=admin` applies when the database user was created in the `admin` database. Use the URI appropriate to your MongoDB setup.
+
+For an existing local MongoDB instance configured without authentication, the URI may instead be:
+
+```dotenv
+MONGODB_URI=mongodb://localhost:27017
+```
+
+Installing the Python package does not start a MongoDB server. Start your existing MongoDB service or container separately before running the script.
+
+### `.gitignore`
+
+```gitignore
+.env
+.venv/
+__pycache__/
+*.pyc
+```
+
+Keep real API keys and database credentials out of Git. A committed `.env.example` should contain placeholders only.
+
+## 9. Complete Example — `chat_checkpoint.py`
+
+This version preserves the main structure of my original code, loads credentials from `.env`, and adds an input loop to test multiple messages and separate runs.
+
+```python
+import os
+from pathlib import Path
+from typing import Annotated
+
+from dotenv import load_dotenv
+from langchain.chat_models import init_chat_model
+from langgraph.checkpoint.mongodb import MongoDBSaver
+from langgraph.graph import END, START, StateGraph
+from langgraph.graph.message import add_messages
+from typing_extensions import TypedDict
+
+
+load_dotenv(Path(__file__).with_name(".env"))
+
+
+class State(TypedDict):
+    messages: Annotated[list, add_messages]
+
+
+def main():
+    if not os.getenv("OPENAI_API_KEY"):
+        raise ValueError("Set OPENAI_API_KEY in your local .env file.")
+
+    db_uri = os.getenv("MONGODB_URI")
+    if not db_uri:
+        raise ValueError("Set MONGODB_URI in your local .env file.")
+
+    llm = init_chat_model(
+        model="gpt-4.1-mini",
+        model_provider="openai",
+    )
+
+    def chatbot(state: State):
+        response = llm.invoke(state["messages"])
+        return {"messages": [response]}
+
+    graph_builder = StateGraph(State)
+    graph_builder.add_node("chatbot", chatbot)
+    graph_builder.add_edge(START, "chatbot")
+    graph_builder.add_edge("chatbot", END)
+
+    def compile_graph_with_checkpointer(checkpointer):
+        return graph_builder.compile(checkpointer=checkpointer)
+
+    thread_id = os.getenv("THREAD_ID", "module11-prokash-001")
+    config = {"configurable": {"thread_id": thread_id}}
+
+    with MongoDBSaver.from_conn_string(db_uri) as checkpointer:
+        graph = compile_graph_with_checkpointer(checkpointer)
+
+        print(f"Conversation thread: {thread_id}")
+        print("Type 'exit' or 'quit' to stop.")
+
+        while True:
+            user_query = input("\nYou: ").strip()
+
+            if user_query.lower() in {"exit", "quit"}:
+                break
+            if not user_query:
+                continue
+
+            for chunk in graph.stream(
+                {"messages": [{"role": "user", "content": user_query}]},
+                config=config,
+                stream_mode="values",
+            ):
+                chunk["messages"][-1].pretty_print()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+The graph is used inside the `with` block while the checkpointer connection is open. Each turn sends only the new user message; the checkpointer and reducer handle the saved history.
+
+The example follows the original single-mode streaming format, where `chunk` is the state dictionary. Examples using `version="v2"` have a different wrapper format and access state through `chunk["data"]`.
+
+## 10. Run and Verify Persistence
+
+Run the script:
+
+```powershell
+.\.venv\Scripts\python.exe chat_checkpoint.py
+```
+
+### Test A: Same program run
+
+1. Enter `My name is Prokash.`
+2. Enter `What is my name?`
+3. Check whether the answer uses the earlier introduction.
+
+### Test B: Separate program runs
+
+1. Enter `exit` after introducing yourself.
+2. Run the script again.
+3. Keep the same MongoDB configuration and `THREAD_ID`.
+4. Enter `What is my name?`
+5. Check whether the earlier introduction is still available.
+
+The expected behavior is a response identifying the name as Prokash; exact wording may vary. This is an expected result, not a recorded successful test.
+
+### Test C: Separate conversation
+
+Change `THREAD_ID` in `.env` to a previously unused value, restart the script, and ask `What is my name?` without an introduction.
+
+That thread should have no saved introduction. The model should not have a reliable basis for identifying the name from this conversation.
+
+**Persistence depends on keeping the MongoDB data.** For container-based MongoDB, retain its data volume when recreating the container.
+
+## 11. What State Streaming Means
+
+```python
+stream_mode="values"
+```
+
+This yields full state snapshots during graph execution. The display code selects the last message from each snapshot:
+
+```python
+chunk["messages"][-1].pretty_print()
+```
+
+It may print the incoming user message before printing the chatbot response. That is expected for this display loop.
+
+| Mode | Data exposed |
+| --- | --- |
+| `values` | Full state snapshots |
+| `updates` | State updates returned by nodes |
+| `messages` | Model message chunks with metadata |
+
+**State streaming is not token-by-token response streaming.** This example uses `values` to observe state, rather than displaying the answer token by token.
+
+## 12. Checkpointing, Training, and Cross-Thread Memory
+
+| Concept | Meaning |
+| --- | --- |
+| Checkpointing | Saving and restoring graph state for a conversation thread |
+| Context | Messages supplied to the model for a particular request |
+| Model training | Updating model parameters; not performed by this example |
+| Cross-thread memory | Sharing selected information across conversations; requires additional design |
+
+A MongoDB checkpoint can persist for a long time, but its conversation state is still scoped to a thread. This example does not implement a separate cross-thread memory store.
+
+Long histories also require context management: saving messages does not give the model an unlimited context window.
+
+## 13. Common Problems
+
+| Problem | What to check |
+| --- | --- |
+| `ModuleNotFoundError` | Install dependencies using the same Python environment that runs the script. |
+| Missing environment variable | Check `.env` is next to `chat_checkpoint.py` and contains the required variables. |
+| MongoDB connection timeout | Check the server/container, hostname, port, and connection URI. |
+| MongoDB authentication error | Check username, password, and authentication database. |
+| Model does not recall the introduction | Confirm it was submitted successfully using the same thread and database. |
+| History disappears after container recreation | Check whether MongoDB's data volume was retained. |
+| User message appears in output | The loop prints the last message from every emitted state snapshot. |
+| API request fails | Check model access, credentials, quota, and the returned error. |
+
+## 14. Practice Checklist
+
+- [ ] Run the script with my own environment configuration.
+- [ ] Introduce myself and ask my name in the same run.
+- [ ] Restart Python and verify the same thread retains context.
+- [ ] Verify a new thread has separate history.
+- [ ] Inspect the stored checkpoints in MongoDB.
+- [ ] Explain the difference between state streaming and token streaming.
+
+## Key Takeaways
+
+- A checkpointer adds persistence to a compiled LangGraph workflow.
+- MongoDB stores application state; it does not train the language model.
+- `add_messages` combines message updates with existing history.
+- Reusing the correct thread ID allows a conversation to continue.
+- A name must be supplied in a message; a thread ID or Python comment is not an introduction.
+- `stream_mode="values"` exposes state snapshots.
+
+## References
+
+- [LangGraph persistence](https://docs.langchain.com/oss/python/langgraph/persistence)
+- [LangGraph Graph API and message reducers](https://docs.langchain.com/oss/python/langgraph/graph-api)
+- [LangGraph streaming](https://docs.langchain.com/oss/python/langgraph/streaming)
+- [MongoDBSaver API reference](https://langchain-mongodb.readthedocs.io/en/latest/langgraph_checkpoint_mongodb/saver/langgraph.checkpoint.mongodb.saver.MongoDBSaver.html)
+- [MongoDB checkpointer package README](https://github.com/langchain-ai/langchain-mongodb/blob/main/libs/langgraph-checkpoint-mongodb/README.md)
+
+
 *Personal learning notes. Python examples were syntax-checked, but live API calls were not run. Supply valid credentials and supported model IDs before running them. API errors such as quota limits, authentication failures, and unsupported features still need handling in a production application.*
 
 
